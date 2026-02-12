@@ -9,6 +9,41 @@ document.addEventListener('DOMContentLoaded',()=>{
   const visualizer = document.getElementById('visualizer');
   const overlay = document.getElementById('overlay');
   const snowContainer = document.getElementById('snowContainer');
+  const tagline = document.getElementById('tagline');
+
+  // Tagline click to copy link
+  tagline.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText('https://gamesense.pub');
+      // Show feedback
+      const originalText = tagline.textContent;
+      tagline.textContent = 'Link Copied!';
+      tagline.style.color = '#0f0';
+      
+      setTimeout(() => {
+        tagline.textContent = originalText;
+        tagline.style.color = '';
+      }, 2000);
+    } catch (err) {
+      // Fallback for older browsers
+      const textArea = document.createElement('textarea');
+      textArea.value = 'https://gamesense.pub';
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textArea);
+      
+      // Show feedback
+      const originalText = tagline.textContent;
+      tagline.textContent = 'Link Copied!';
+      tagline.style.color = '#0f0';
+      
+      setTimeout(() => {
+        tagline.textContent = originalText;
+        tagline.style.color = '';
+      }, 2000);
+    }
+  });
 
   // Playlist of songs
   const playlist = [
@@ -51,8 +86,18 @@ document.addEventListener('DOMContentLoaded',()=>{
       setTimeout(() => createSnowflake(), Math.random() * 2000);
     }
     
-    // Continue creating snowflakes continuously
+    // Continue creating snowflakes continuously with backup
     snowInterval = setInterval(createSnowflake, 300);
+    
+    // Add backup interval to ensure snow never stops
+    setInterval(() => {
+      if (snowInterval && snowContainer.children.length < 10) {
+        // If snowflake count gets too low, create more
+        for (let i = 0; i < 5; i++) {
+          setTimeout(() => createSnowflake(), Math.random() * 1000);
+        }
+      }
+    }, 5000); // Check every 5 seconds
   }
 
   function stopSnow() {
