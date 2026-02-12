@@ -10,38 +10,44 @@ document.addEventListener('DOMContentLoaded',()=>{
   const overlay = document.getElementById('overlay');
   const snowContainer = document.getElementById('snowContainer');
   const tagline = document.getElementById('tagline');
+  const toastContainer = document.getElementById('toastContainer');
+
+  // Toast notification function
+  function showToast(message, type = 'success') {
+    // Remove any existing toasts instantly
+    toastContainer.innerHTML = '';
+    
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    toast.textContent = message;
+    toastContainer.appendChild(toast);
+    
+    // Auto remove after 3 seconds
+    setTimeout(() => {
+      toast.classList.add('hidden');
+      setTimeout(() => {
+        if (toast.parentNode) {
+          toast.remove();
+        }
+      }, 300);
+    }, 3000);
+  }
 
   // Tagline click to copy link
   tagline.addEventListener('click', async () => {
     try {
-      await navigator.clipboard.writeText('https://gamesense.pub');
-      // Show feedback
-      const originalText = tagline.textContent;
-      tagline.textContent = 'Link Copied!';
-      tagline.style.color = '#0f0';
-      
-      setTimeout(() => {
-        tagline.textContent = originalText;
-        tagline.style.color = '';
-      }, 2000);
+      await navigator.clipboard.writeText('https://ech0.cc/');
+      showToast('Link copied to clipboard!');
     } catch (err) {
       // Fallback for older browsers
       const textArea = document.createElement('textarea');
-      textArea.value = 'https://gamesense.pub';
+      textArea.value = 'https://ech0.cc/';
       document.body.appendChild(textArea);
       textArea.select();
       document.execCommand('copy');
       document.body.removeChild(textArea);
       
-      // Show feedback
-      const originalText = tagline.textContent;
-      tagline.textContent = 'Link Copied!';
-      tagline.style.color = '#0f0';
-      
-      setTimeout(() => {
-        tagline.textContent = originalText;
-        tagline.style.color = '';
-      }, 2000);
+      showToast('Link copied to clipboard!');
     }
   });
 
@@ -251,11 +257,10 @@ document.addEventListener('DOMContentLoaded',()=>{
   });
 
   audio.addEventListener('timeupdate',()=>{
-    if(isFinite(audio.duration) && audio.duration>0){
-      const pct = (audio.currentTime/audio.duration)*100;
-      progress.value = pct;
-      progressBar.style.width = pct + '%';
-      time.textContent = formatTime(audio.currentTime);
+    if(audio.duration){
+      const progressPercent = (audio.currentTime / audio.duration) * 100;
+      progressBar.style.width = progressPercent + '%';
+      progress.value = progressPercent;
     }
   });
 
