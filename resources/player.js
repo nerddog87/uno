@@ -51,14 +51,307 @@ document.addEventListener('DOMContentLoaded',()=>{
     }
   });
 
-  // Playlist of songs
-  const playlist = [
-    { src: 'resources/vivienne%20-%20jaydes.mp3', name: 'vivienne - jaydes' },
-    { src: 'resources/Smirnoff%20Ice%20-%20Yung%20Lean.mp3', name: 'Smirnoff Ice - Yung Lean' },
-    { src: 'resources/Bored%20-%20Joeyy.mp3', name: 'Bored - Joeyy' }
-  ];
+  // Discord status functionality
+  const discordUserId = '284372724900691979';
+  const discordAvatar = document.getElementById('discordAvatar');
+  const discordName = document.getElementById('discordName');
+  const discordStatus = document.getElementById('discordStatus');
+  const discordStatusContainer = document.querySelector('.discord-status');
+  const copyDiscordIdBtn = document.getElementById('copyDiscordId');
+
+  // Copy Discord ID functionality
+  copyDiscordIdBtn.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText('endfawr');
+      showToast('Discord username copied to clipboard!');
+    } catch (err) {
+      const textArea = document.createElement('textarea');
+      textArea.value = 'endfawr';
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textArea);
+      showToast('Discord username copied to clipboard!');
+    }
+  });
+
+  function updateDiscordUI(data) {
+    try {
+      if (data) {
+        // Update avatar with cache busting prevention
+        if (data.discord_user.avatar) {
+          const avatarUrl = `https://cdn.discordapp.com/avatars/${data.discord_user.id}/${data.discord_user.avatar}.png?size=64`;
+          discordAvatar.src = avatarUrl;
+        } else {
+          discordAvatar.src = `https://cdn.discordapp.com/embed/avatars/${parseInt(data.discord_user.discriminator) % 5}.png`;
+        }
+        
+        // Update name
+        const displayName = data.discord_user.global_name || data.discord_user.username;
+        discordName.textContent = displayName;
+        
+        // Update status
+        const statusMap = {
+          online: 'Online',
+          idle: 'Idle', 
+          dnd: 'Do Not Disturb',
+          offline: 'Offline'
+        };
+        
+        const statusText = statusMap[data.discord_status] || 'Unknown';
+        discordStatus.textContent = statusText;
+        
+        // Update status class for styling
+        discordStatusContainer.className = `discord-status ${data.discord_status}`;
+        
+        // Add activity if present
+        if (data.activities && data.activities.length > 0) {
+          const activity = data.activities[0];
+          if (activity.name && activity.name !== 'Custom Status') {
+            discordStatus.textContent = `${statusText} - ${activity.name}`;
+          }
+        }
+        
+        // Update Spotify status
+        updateSpotifyStatus(data);
+      }
+    } catch (error) {
+      console.error('Error updating Discord UI:', error);
+    }
+  }
+
+  // Spotify status functionality
+  const spotifyAlbumArt = document.getElementById('spotifyAlbumArt');
+  const spotifySong = document.getElementById('spotifySong');
+  const spotifyArtist = document.getElementById('spotifyArtist');
+  const spotifyStatusContainer = document.getElementById('spotifyStatus');
+  const spotifyProgressBar = document.getElementById('spotifyProgressBar');
+  const spotifyCurrentTime = document.getElementById('spotifyCurrentTime');
+  const spotifyTotalTime = document.getElementById('spotifyTotalTime');
+  const spotifyCard = document.querySelector('.spotify-card');
+
+  let spotifyProgressInterval;
+
+  function formatSpotifyTime(ms) {
+    if (!ms || !isFinite(ms)) return '0:00';
+    const seconds = Math.floor(ms / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+  }
+
+  function updateSpotifyProgress(data) {
+    try {
+      const spotifyActivity = data.activities?.find(activity => activity.type === 2 && activity.name === 'Spotify');
+      
+      if (spotifyActivity && spotifyActivity.timestamps) {
+        const { start, end } = spotifyActivity.timestamps;
+        
+        if (start && end) {
+          const now = Date.now();
+          const totalDuration = end - start;
+          const currentProgress = now - start;
+          
+          // Calculate progress percentage
+          const progressPercent = Math.max(0, Math.min(100, (currentProgress / totalDuration) * 100));
+          
+          // Update progress bar
+          spotifyProgressBar.style.setProperty('--progress', progressPercent + '%');
+          
+          // Update time displays
+          spotifyCurrentTime.textContent = formatSpotifyTime(currentProgress);
+          spotifyTotalTime.textContent = formatSpotifyTime(totalDuration);
+          
+          // Start real-time updates
+          if (!spotifyProgressInterval) {
+            spotifyProgressInterval = setInterval(() => {
+              const now = Date.now();
+              const currentProgress = now - start;
+              
+              if (currentProgress >= totalDuration) {
+                // Song ended, clear interval
+                clearInterval(spotifyProgressInterval);
+                spotifyProgressInterval = null;
+                spotifyProgressBar.style.setProperty('--progress', '0%');
+                spotifyCurrentTime.textContent = '0:00';
+              } else {
+                const progressPercent = Math.max(0, Math.min(100, (currentProgress / totalDuration) * 100));
+                spotifyProgressBar.style.setProperty('--progress', progressPercent + '%');
+                spotifyCurrentTime.textContent = formatSpotifyTime(currentProgress);
+              }
+            }, 1000); // Update every second
+          }
+        }
+      } else {
+        // No Spotify activity or no timestamps
+        clearInterval(spotifyProgressInterval);
+        spotifyProgressInterval = null;
+        spotifyProgressBar.style.setProperty('--progress', '0%');
+        spotifyCurrentTime.textContent = '0:00';
+        spotifyTotalTime.textContent = '0:00';
+      }
+    } catch (error) {
+      console.error('Error updating Spotify progress:', error);
+      clearInterval(spotifyProgressInterval);
+      spotifyProgressInterval = null;
+    }
+  }
+
+  function updateSpotifyStatus(data) {
+    try {
+      const spotifyActivity = data.activities?.find(activity => activity.type === 2 && activity.name === 'Spotify');
+      
+      if (spotifyActivity && spotifyActivity.assets) {
+        // Show the Spotify card immediately
+        spotifyCard.classList.remove('hidden');
+        
+        // Update album art
+        if (spotifyActivity.assets.large_image) {
+          const albumArtUrl = spotifyActivity.assets.large_image.startsWith('spotify:') 
+            ? `https://i.scdn.co/image/${spotifyActivity.assets.large_image.replace('spotify:', '')}`
+            : spotifyActivity.assets.large_image;
+          spotifyAlbumArt.src = albumArtUrl;
+        } else {
+          spotifyAlbumArt.src = 'https://i.scdn.co/image/ab67616d0000b2735a9a6c4b9a0c4e5a6d7e8f9a'; // Default Spotify placeholder
+        }
+        
+        // Update song and artist
+        spotifySong.textContent = spotifyActivity.details || 'Unknown Song';
+        spotifyArtist.textContent = spotifyActivity.state || 'Unknown Artist';
+        
+        // Add playing class for green color
+        spotifyStatusContainer.className = 'spotify-status playing';
+        
+        // Update progress
+        updateSpotifyProgress(data);
+      } else {
+        // Hide the Spotify card with fade-out animation
+        spotifyCard.classList.add('hidden');
+        
+        // Clear progress after animation completes
+        setTimeout(() => {
+          if (spotifyCard.classList.contains('hidden')) {
+            clearInterval(spotifyProgressInterval);
+            spotifyProgressInterval = null;
+            spotifyProgressBar.style.setProperty('--progress', '0%');
+            spotifyCurrentTime.textContent = '0:00';
+            spotifyTotalTime.textContent = '0:00';
+          }
+        }, 300); // Match the CSS transition duration
+      }
+    } catch (error) {
+      console.error('Error updating Spotify status:', error);
+      // Hide card on error with fade-out
+      spotifyCard.classList.add('hidden');
+      
+      // Clear progress after animation
+      setTimeout(() => {
+        if (spotifyCard.classList.contains('hidden')) {
+          clearInterval(spotifyProgressInterval);
+          spotifyProgressInterval = null;
+          spotifyProgressBar.style.setProperty('--progress', '0%');
+          spotifyCurrentTime.textContent = '0:00';
+          spotifyTotalTime.textContent = '0:00';
+        }
+      }, 300);
+    }
+  }
+
+  // Fast HTTP API with timeout
+  async function tryHTTPAPI() {
+    try {
+      // Set a timeout of 5 seconds
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      
+      const response = await fetch(`https://api.lanyard.rest/v1/users/${discordUserId}`, {
+        signal: controller.signal,
+        headers: {
+          'Accept': 'application/json',
+          'Cache-Control': 'no-cache'
+        }
+      });
+      
+      clearTimeout(timeoutId);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      
+      const result = await response.json();
+      
+      if (result.success && result.data) {
+        updateDiscordUI(result.data);
+      } else {
+        throw new Error('Invalid response');
+      }
+    } catch (error) {
+      console.error('HTTP API failed:', error);
+      // Set default values immediately on error
+      discordName.textContent = 'Status unavailable';
+      discordStatus.textContent = 'Connection failed';
+      discordStatusContainer.className = 'discord-status offline';
+      discordAvatar.src = 'https://cdn.discordapp.com/embed/avatars/0.png';
+    }
+  }
+
+  // Initialize with timeout and fallback
+  function initDiscordStatus() {
+    // Show loading state briefly
+    discordName.textContent = 'Loading...';
+    discordStatus.textContent = 'Connecting...';
+    
+    // Try HTTP API first (faster than WebSocket for initial load)
+    tryHTTPAPI();
+    
+    // Try WebSocket for real-time updates
+    setTimeout(initWebSocket, 1000);
+  }
+
+  // WebSocket for real-time updates
+  function initWebSocket() {
+    try {
+      const ws = new WebSocket(`wss://api.lanyard.rest/socket`);
+      
+      ws.onopen = () => {
+        console.log('Lanyard WebSocket connected for real-time updates');
+        ws.send(JSON.stringify({
+          op: 2,
+          d: {
+            subscribe_to_id: discordUserId
+          }
+        }));
+      };
+      
+      ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        if (data.t === 'PRESENCE_UPDATE') {
+          updateDiscordUI(data.d);
+        }
+      };
+      
+      ws.onerror = (error) => {
+        console.error('WebSocket error:', error);
+      };
+      
+      ws.onclose = () => {
+        console.log('WebSocket closed, retrying in 10s...');
+        setTimeout(initWebSocket, 10000);
+      };
+      
+    } catch (error) {
+      console.error('WebSocket failed:', error);
+    }
+  }
+
+  // Initialize immediately
+  initDiscordStatus();
   
-  let currentSongIndex = 0;
+  // Update every 10 seconds as fallback (reduced from 60 for faster updates)
+  setInterval(tryHTTPAPI, 10000);
+
+  // Single song - vivienne - jaydes
+  const song = { src: 'resources/vivienne%20-%20jaydes.mp3', name: 'vivienne - jaydes' };
 
   // Snow functionality
   function createSnowflake() {
@@ -66,39 +359,35 @@ document.addEventListener('DOMContentLoaded',()=>{
     snowflake.className = 'snowflake';
     snowflake.textContent = '*'; // Using asterisk for snowflake
     snowflake.style.left = Math.random() * 100 + '%';
-    snowflake.style.animationDuration = Math.random() * 3 + 7 + 's'; // 7-10 seconds
+    const durationSec = Math.random() * 3 + 7; // 7-10 seconds
+    snowflake.style.animationDuration = durationSec + 's';
+    snowflake.style.animationIterationCount = '1';
     snowflake.style.opacity = Math.random() * 0.6 + 0.4; // 0.4-1.0 opacity
     snowflake.style.fontSize = Math.random() * 4 + 8 + 'px'; // 8-12px
     snowContainer.appendChild(snowflake);
     
-    // Remove snowflake after it falls (but don't stop the interval)
+    // Remove snowflake after it falls
     setTimeout(() => {
       if (snowflake.parentNode) {
         snowflake.remove();
       }
-    }, 10000);
+    }, (durationSec * 1000) + 100);
   }
 
   let snowInterval;
+  let snowMonitorInterval;
+  let snowStarted = false;
 
   function startSnow() {
-    // Clear any existing interval
-    if (snowInterval) {
-      clearInterval(snowInterval);
-    }
-    
-    // Create initial batch of snowflakes
-    for (let i = 0; i < 20; i++) {
-      setTimeout(() => createSnowflake(), Math.random() * 2000);
-    }
-    
-    // Continue creating snowflakes continuously with backup
+    if (snowStarted) return;
+    snowStarted = true;
+
+    // Continue creating snowflakes continuously
     snowInterval = setInterval(createSnowflake, 300);
-    
-    // Add backup interval to ensure snow never stops
-    setInterval(() => {
-      if (snowInterval && snowContainer.children.length < 10) {
-        // If snowflake count gets too low, create more
+
+    // Backup monitor to keep density stable
+    snowMonitorInterval = setInterval(() => {
+      if (snowContainer.children.length < 10) {
         for (let i = 0; i < 5; i++) {
           setTimeout(() => createSnowflake(), Math.random() * 1000);
         }
@@ -111,6 +400,11 @@ document.addEventListener('DOMContentLoaded',()=>{
       clearInterval(snowInterval);
       snowInterval = null;
     }
+    if (snowMonitorInterval) {
+      clearInterval(snowMonitorInterval);
+      snowMonitorInterval = null;
+    }
+    snowStarted = false;
     snowContainer.innerHTML = '';
   }
 
@@ -154,19 +448,19 @@ document.addEventListener('DOMContentLoaded',()=>{
 
   typeTitle();
 
-  function loadSong(index) {
-    const song = playlist[index];
+  function loadSong() {
     audio.src = song.src;
     songTitle.textContent = song.name;
-    currentSongIndex = index;
     audio.load();
   }
 
   function nextSong() {
-    currentSongIndex = (currentSongIndex + 1) % playlist.length;
-    loadSong(currentSongIndex);
+    // Restart the same song
+    loadSong();
     audio.play();
     playBtn.classList.add('playing');
+    // Clear any existing interval before starting new one
+    clearInterval(visualizerInterval);
     visualizerInterval = setInterval(animateVisualizer, 100);
   }
 
@@ -208,13 +502,39 @@ document.addEventListener('DOMContentLoaded',()=>{
   createVisualizerBars();
   let visualizerInterval;
 
-  // Audio ended event - play next song
+  // Audio ended event - restart same song
   audio.addEventListener('ended', () => {
-    nextSong();
+    // Restart the same song
+    clearInterval(visualizerInterval);
+    audio.currentTime = 0;
+    audio.play();
+    playBtn.classList.add('playing');
+    visualizerInterval = setInterval(animateVisualizer, 100);
   });
 
-  // Initialize with first song
-  loadSong(0);
+  // Initialize with single song
+  loadSong();
+  
+  // Set volume to 20% and lock it
+  audio.volume = 0.2;
+  
+  // Prevent volume changes
+  audio.addEventListener('volumechange', () => {
+    if (audio.volume !== 0.2) {
+      audio.volume = 0.2;
+    }
+  });
+  
+  // Override any volume control attempts
+  const originalVolumeSet = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'volume');
+  if (originalVolumeSet && originalVolumeSet.set) {
+    Object.defineProperty(audio, 'volume', {
+      get: originalVolumeSet.get,
+      set: function(value) {
+        originalVolumeSet.set.call(this, 0.2);
+      }
+    });
+  }
 
   // Overlay click handler
   overlay.addEventListener('click',()=>{
@@ -224,6 +544,8 @@ document.addEventListener('DOMContentLoaded',()=>{
     // Start music and snow immediately
     audio.play();
     playBtn.classList.add('playing');
+    // Clear any existing interval before starting new one
+    clearInterval(visualizerInterval);
     visualizerInterval = setInterval(animateVisualizer, 100);
     startSnow();
     
@@ -238,11 +560,14 @@ document.addEventListener('DOMContentLoaded',()=>{
     if(audio.paused){
       audio.play();
       playBtn.classList.add('playing');
+      // Clear any existing interval before starting new one
+      clearInterval(visualizerInterval);
       visualizerInterval = setInterval(animateVisualizer, 100);
     } else {
       audio.pause();
       playBtn.classList.remove('playing');
       clearInterval(visualizerInterval);
+      visualizerInterval = null; // Ensure interval is nullified
       // Reset bars to minimum height
       const bars = visualizer.querySelectorAll('.bar');
       bars.forEach(bar => {
@@ -262,18 +587,6 @@ document.addEventListener('DOMContentLoaded',()=>{
       progressBar.style.width = progressPercent + '%';
       progress.value = progressPercent;
     }
-  });
-
-  audio.addEventListener('ended',()=>{
-    playBtn.classList.remove('playing');
-    progress.value = 0;
-    progressBar.style.width = '0%';
-    clearInterval(visualizerInterval);
-    // Reset bars
-    const bars = visualizer.querySelectorAll('.bar');
-    bars.forEach(bar => {
-      bar.style.height = '3px';
-    });
   });
 
   // Click to seek on progress bar
